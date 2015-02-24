@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Mon Feb 23 18:32:37 2015 Marin Alcaraz
+** Last update Tue Feb 24 14:46:24 2015 Marin Alcaraz
  */
 
 package main
@@ -18,9 +18,9 @@ import (
 
 func handler(w http.ResponseWriter, req *http.Request) {
 	target := req.URL.String()
+	fmt.Printf("Target [%s]\n", target)
 	for key := range req.Header {
 		w.Header().Set(key, req.Header.Get(key))
-		fmt.Println(w.Header().Get(key))
 	}
 	//for key := range req.Header {
 	//for _, v := range req.Header[key] {
@@ -28,11 +28,16 @@ func handler(w http.ResponseWriter, req *http.Request) {
 	//w.Header().Add(key, v)
 	//}
 	//}
-	res, _ := goreq.Request{Uri: target}.Do()
-	w.Header().Set("Content-Type", res.Header.Get("Content-Type"))
-	content, _ := res.Body.ToString()
+	proxyRequest := goreq.Request{Uri: target}
+	//for key := range req.Header {
+	//proxyRequest.AddHeader(key, req.Header.Get(key))
+	//fmt.Printf("%s=>%s\n", key, req.Header.Get(key))
+	//}
+	result, _ := proxyRequest.Do()
+	w.Header().Set("Content-Type", result.Header.Get("Content-Type"))
+	content, _ := result.Body.ToString()
 	w.Write([]byte(content))
-	res.Body.Close()
+	result.Body.Close()
 }
 
 func main() {
