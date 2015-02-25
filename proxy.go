@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Wed Feb 25 00:00:14 2015 Marin Alcaraz
+** Last update Wed Feb 25 12:00:25 2015 Marin Alcaraz
  */
 
 package main
@@ -11,6 +11,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -30,10 +31,10 @@ func check(err error) {
 
 }
 
-func populateBlackList(bl *blackList) {
+func populateBlackList(bl *blackList, blackListFilename string) {
 	//Is there any better way to do this? slice size = 1
 	*bl = make(blackList, 1)
-	blackListFile, err := os.Open("blacklist.txt")
+	blackListFile, err := os.Open(blackListFilename)
 	check(err)
 
 	defer blackListFile.Close()
@@ -53,6 +54,7 @@ func populateBlackList(bl *blackList) {
 
 func (bl *blackList) contains(target string) bool {
 	for _, val := range *bl {
+		fmt.Printf("%s against %s\n", target, val)
 		if val == target {
 			return true
 		}
@@ -65,7 +67,8 @@ func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 
 	//Todo: pattern matching!
 	if hostBlackList.contains(target) {
-		io.Copy(w, nil)
+		fmt.Println("[+]Filtering: ", target)
+		http.NotFound(w, req)
 	} else {
 
 		client := &http.Client{}
@@ -76,14 +79,17 @@ func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 		data := req.Form.Encode()
 		bufferedData := bytes.NewBufferString(data)
 
-		proxyRequest, _ := http.NewRequest(req.Method, target, bufferedData)
+		proxyRequest, err := http.NewRequest(req.Method,
+			target, bufferedData)
+		check(err)
 		proxyRequest.Form = req.Form
 		proxyRequest.ParseForm()
-		proxyResponse, _ := client.Do(proxyRequest)
-
+		proxyResponse, err := client.Do(proxyRequest)
+		check(err)
 		defer proxyRequest.Body.Close()
 
-		w.Header().Set("Content-Type", proxyResponse.Header.Get("Content-Type"))
+		w.Header().Set("Content-Type",
+			proxyResponse.Header.Get("Content-Type"))
 		io.Copy(w, proxyResponse.Body)
 
 	}
@@ -91,13 +97,15 @@ func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
+	listFileName := flag.String("list", "blackList.txt",
+		"New line separated host file")
+	flag.Parse()
 
-	populateBlackList(&hostBlackList)
-	fmt.Println(hostBlackList)
+	populateBlackList(&hostBlackList, *listFileName)
+	fmt.Printf("[+] Blackisted: %d hosts\n", len(hostBlackList))
+
 	http.HandleFunc("/", proxyRequestHandler)
-	fmt.Println("[!]Local service binded on :8080/")
+	fmt.Println("[+] Local service binded on :8080/")
 	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		log.Fatal(err)
-	}
+	check(err)
 }
