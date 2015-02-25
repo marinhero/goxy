@@ -3,48 +3,83 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Tue Feb 24 14:46:24 2015 Marin Alcaraz
+** Last update Tue Feb 24 19:09:50 2015 Marin Alcaraz
  */
 
 package main
 
 import (
+	"bytes"
+	"encoding/csv"
 	"fmt"
-	"log"
+	"io"
 	"net/http"
-
-	"github.com/franela/goreq"
+	"os"
 )
+
+type blackList struct {
+	records []string
+}
+
+func (bl *blackList) populateBlackList() {
+	csvfile, err := os.Open("blacklist.csv")
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	defer csvfile.Close()
+	reader := csv.NewReader(csvfile)
+	reader.FieldsPerRecord = -1 // see the Reader struct information below
+	rawCSVdata, err := reader.ReadAll()
+
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	for k, each := range rawCSVdata {
+		fmt.Printf("%s\n", each[0])
+		bl.records[k] = each[0]
+	}
+}
 
 func handler(w http.ResponseWriter, req *http.Request) {
 	target := req.URL.String()
-	fmt.Printf("Target [%s]\n", target)
-	for key := range req.Header {
-		w.Header().Set(key, req.Header.Get(key))
+	//Compare with blacklist
+	if target == "http://sourcemaking.com/sites/all/themes/sm7/images/logo.png" {
+		io.Copy(w, nil)
+	} else {
+
+		client := &http.Client{}
+
+		req.ParseForm()
+
+		data := req.Form.Encode()
+		bufferedData := bytes.NewBufferString(data)
+
+		proxyRequest, _ := http.NewRequest(req.Method, target, bufferedData)
+		proxyRequest.Form = req.Form
+		proxyRequest.ParseForm()
+		proxyResponse, _ := client.Do(proxyRequest)
+
+		defer proxyRequest.Body.Close()
+
+		w.Header().Set("Content-Type", proxyResponse.Header.Get("Content-Type"))
+		io.Copy(w, proxyResponse.Body)
+
 	}
-	//for key := range req.Header {
-	//for _, v := range req.Header[key] {
-	//fmt.Printf("[%s]=>%s\n", key, v)
-	//w.Header().Add(key, v)
-	//}
-	//}
-	proxyRequest := goreq.Request{Uri: target}
-	//for key := range req.Header {
-	//proxyRequest.AddHeader(key, req.Header.Get(key))
-	//fmt.Printf("%s=>%s\n", key, req.Header.Get(key))
-	//}
-	result, _ := proxyRequest.Do()
-	w.Header().Set("Content-Type", result.Header.Get("Content-Type"))
-	content, _ := result.Body.ToString()
-	w.Write([]byte(content))
-	result.Body.Close()
+
 }
 
 func main() {
-	http.HandleFunc("/", handler)
-	fmt.Println("[!]Local service binded on :8080/")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		log.Fatal(err)
-	}
+	var hostBlackList blackList
+
+	hostBlackList.populateBlackList()
+	//http.HandleFunc("/", handler)
+	//fmt.Println("[!]Local service binded on :8080/")
+	//err := http.ListenAndServe(":8080", nil)
+	//if err != nil {
+	//log.Fatal(err)
+	//}
 }
