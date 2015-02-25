@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Tue Feb 24 19:09:50 2015 Marin Alcaraz
+** Last update Tue Feb 24 19:28:36 2015 Marin Alcaraz
  */
 
 package main
@@ -13,6 +13,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 )
@@ -21,7 +22,10 @@ type blackList struct {
 	records []string
 }
 
+var hostBlackList blackList
+
 func (bl *blackList) populateBlackList() {
+	bl.records = make([]string, 1)
 	csvfile, err := os.Open("blacklist.csv")
 
 	if err != nil {
@@ -38,21 +42,31 @@ func (bl *blackList) populateBlackList() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
-	for k, each := range rawCSVdata {
-		fmt.Printf("%s\n", each[0])
-		bl.records[k] = each[0]
+	for _, each := range rawCSVdata {
+		bl.records = append(bl.records, each[0])
 	}
+}
+
+func (bl *blackList) isInBlackList(target string) bool {
+	for _, val := range bl.records {
+		if val == target {
+			return true
+		}
+	}
+	return false
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {
 	target := req.URL.String()
-	//Compare with blacklist
-	if target == "http://sourcemaking.com/sites/all/themes/sm7/images/logo.png" {
+
+	//Todo: pattern matching!
+	if hostBlackList.isInBlackList(target) {
 		io.Copy(w, nil)
 	} else {
 
 		client := &http.Client{}
 
+		//What is wrong with the POSTS requests?
 		req.ParseForm()
 
 		data := req.Form.Encode()
@@ -73,13 +87,12 @@ func handler(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	var hostBlackList blackList
 
 	hostBlackList.populateBlackList()
-	//http.HandleFunc("/", handler)
-	//fmt.Println("[!]Local service binded on :8080/")
-	//err := http.ListenAndServe(":8080", nil)
-	//if err != nil {
-	//log.Fatal(err)
-	//}
+	http.HandleFunc("/", handler)
+	fmt.Println("[!]Local service binded on :8080/")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
