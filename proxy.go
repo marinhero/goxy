@@ -3,20 +3,22 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Wed Feb 25 12:00:25 2015 Marin Alcaraz
+** Last update Thu Feb 26 15:48:35 2015 Marin Alcaraz
  */
 
 package main
 
 import (
 	"bufio"
-	"bytes"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"strings"
+	"unicode"
 )
 
 type blackList []string
@@ -54,7 +56,6 @@ func populateBlackList(bl *blackList, blackListFilename string) {
 
 func (bl *blackList) contains(target string) bool {
 	for _, val := range *bl {
-		fmt.Printf("%s against %s\n", target, val)
 		if val == target {
 			return true
 		}
@@ -71,27 +72,24 @@ func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 		http.NotFound(w, req)
 	} else {
 
-		client := &http.Client{}
+		client := http.DefaultClient
 
-		//What is wrong with the POSTS requests?
-		req.ParseForm()
+		//By RFC 2616 RequestURI must be empty
+		req.RequestURI = ""
 
-		data := req.Form.Encode()
-		bufferedData := bytes.NewBufferString(data)
+		//URL Scheme must be lowercase
+		req.URL.Scheme = strings.Map(unicode.ToLower, req.URL.Scheme)
 
-		proxyRequest, err := http.NewRequest(req.Method,
-			target, bufferedData)
+		proxyResponse, err := client.Do(req)
 		check(err)
-		proxyRequest.Form = req.Form
-		proxyRequest.ParseForm()
-		proxyResponse, err := client.Do(proxyRequest)
-		check(err)
-		defer proxyRequest.Body.Close()
 
-		w.Header().Set("Content-Type",
-			proxyResponse.Header.Get("Content-Type"))
-		io.Copy(w, proxyResponse.Body)
-
+		w.WriteHeader(proxyResponse.StatusCode)
+		for key := range proxyResponse.Header {
+			w.Header().Add(key, proxyResponse.Header.Get(key))
+		}
+		if webContent, err := ioutil.ReadAll(proxyResponse.Body); err == nil {
+			w.Write(webContent)
+		}
 	}
 
 }
