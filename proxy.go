@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Thu Feb 26 16:21:53 2015 Marin Alcaraz
+** Last update Thu Feb 26 18:33:38 2015 Marin Alcaraz
  */
 
 package main
@@ -13,7 +13,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -34,16 +33,28 @@ func check(err error) {
 
 }
 
-func (s blackList) Len() int {
-	return len(s)
+//Satisfy the Sort interface for blacklist type
+
+func (bl blackList) Len() int {
+	return len(bl)
 }
 
-func (s blackList) Swap(i, j int) {
-	s[i], s[j] = s[j], s[i]
+func (bl blackList) Swap(i, j int) {
+	bl[i], bl[j] = bl[j], bl[i]
 }
 
-func (s blackList) Less(i, j int) bool {
-	return len(s[i]) < len(s[j])
+func (bl blackList) Less(i, j int) bool {
+	return len(bl[i]) < len(bl[j])
+}
+
+func (bl *blackList) contains(target string) bool {
+	for _, val := range *bl {
+		//TODO Regular expressions
+		if val == target {
+			return true
+		}
+	}
+	return false
 }
 
 func populateBlackList(bl *blackList, blackListFilename string) {
@@ -59,24 +70,13 @@ func populateBlackList(bl *blackList, blackListFilename string) {
 		case nil:
 			*bl = append(*bl, string(blackTarget))
 		case io.EOF:
-			fmt.Println(hostBlackList)
 			sort.Sort(blackList(hostBlackList))
-			fmt.Println(hostBlackList)
 			return
 		default:
 			log.Fatal(err)
 		}
 	}
 
-}
-
-func (bl *blackList) contains(target string) bool {
-	for _, val := range *bl {
-		if val == target {
-			return true
-		}
-	}
-	return false
 }
 
 func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
@@ -87,7 +87,6 @@ func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 		fmt.Println("[+]Filtering: ", target)
 		http.NotFound(w, req)
 	} else {
-
 		client := http.DefaultClient
 
 		//By RFC 2616 RequestURI must be empty
@@ -98,18 +97,21 @@ func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 
 		//Make the request trough our new defaultclient
 		proxyResponse, err := client.Do(req)
+		defer proxyResponse.Body.Close()
 		check(err)
 
 		//Start to populate the fields of the response writer header
-		w.WriteHeader(proxyResponse.StatusCode)
 		for key := range proxyResponse.Header {
 			w.Header().Add(key, proxyResponse.Header.Get(key))
 		}
 
-		//This fails, it will return an .gz file :(
-		body, err := ioutil.ReadAll(proxyResponse.Body)
+		// Header returns the header map that will be sent by WriteHeader.
+		// Changing the header after a call to WriteHeader (or Write) has
+		// no effect.
+		w.WriteHeader(proxyResponse.StatusCode)
+		_, err = io.Copy(w, proxyResponse.Body)
+
 		check(err)
-		w.Write(body)
 	}
 
 }
