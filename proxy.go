@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Thu Feb 26 15:48:35 2015 Marin Alcaraz
+** Last update Thu Feb 26 16:21:53 2015 Marin Alcaraz
  */
 
 package main
@@ -17,6 +17,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -33,6 +34,18 @@ func check(err error) {
 
 }
 
+func (s blackList) Len() int {
+	return len(s)
+}
+
+func (s blackList) Swap(i, j int) {
+	s[i], s[j] = s[j], s[i]
+}
+
+func (s blackList) Less(i, j int) bool {
+	return len(s[i]) < len(s[j])
+}
+
 func populateBlackList(bl *blackList, blackListFilename string) {
 	//Is there any better way to do this? slice size = 1
 	*bl = make(blackList, 1)
@@ -46,6 +59,9 @@ func populateBlackList(bl *blackList, blackListFilename string) {
 		case nil:
 			*bl = append(*bl, string(blackTarget))
 		case io.EOF:
+			fmt.Println(hostBlackList)
+			sort.Sort(blackList(hostBlackList))
+			fmt.Println(hostBlackList)
 			return
 		default:
 			log.Fatal(err)
@@ -80,16 +96,20 @@ func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 		//URL Scheme must be lowercase
 		req.URL.Scheme = strings.Map(unicode.ToLower, req.URL.Scheme)
 
+		//Make the request trough our new defaultclient
 		proxyResponse, err := client.Do(req)
 		check(err)
 
+		//Start to populate the fields of the response writer header
 		w.WriteHeader(proxyResponse.StatusCode)
 		for key := range proxyResponse.Header {
 			w.Header().Add(key, proxyResponse.Header.Get(key))
 		}
-		if webContent, err := ioutil.ReadAll(proxyResponse.Body); err == nil {
-			w.Write(webContent)
-		}
+
+		//This fails, it will return an .gz file :(
+		body, err := ioutil.ReadAll(proxyResponse.Body)
+		check(err)
+		w.Write(body)
 	}
 
 }
