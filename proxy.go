@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Mon Mar 02 15:56:03 2015 Marin Alcaraz
+** Last update Mon Mar 02 18:46:09 2015 Marin Alcaraz
  */
 
 package main
@@ -15,6 +15,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"sort"
 	"strings"
@@ -78,22 +79,6 @@ func populateBlackList(bl *blackList, blackListFilename string) {
 
 }
 
-func followRedirect(req *http.Request, via []*http.Request) error {
-	if len(via) > 10 {
-		return fmt.Errorf("%d consecutive requests(redirects)", len(via))
-	}
-	if len(via) == 0 {
-		log.Println("No redirect")
-		return nil
-	}
-	log.Printf("Found %d redirects.", len(via))
-	// mutate the subsequent redirect requests with the first Header
-	for key, val := range via[0].Header {
-		req.Header[key] = val
-	}
-	return nil
-}
-
 func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 	target := req.URL.String()
 
@@ -110,18 +95,22 @@ func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 		//URL Scheme must be lowercase
 		req.URL.Scheme = strings.Map(unicode.ToLower, req.URL.Scheme)
 
-		//Define a redirect policy, this will be called after the request is done
-		client.CheckRedirect = followRedirect
+		//Set the cookies
+
+		if client.Jar == nil {
+			client.Jar, _ = cookiejar.New(nil)
+			client.Jar.SetCookies(req.URL, req.Cookies())
+		}
 
 		//Make the request trough our new defaultclient
 		proxyResponse, err := client.Do(req)
+
 		defer proxyResponse.Body.Close()
 		check(err)
 		//Start to populate the fields of the response writer header
 		for key := range proxyResponse.Header {
 			w.Header().Add(key, proxyResponse.Header.Get(key))
 		}
-
 		// Header returns the header map that will be sent by WriteHeader.
 		// Changing the header after a call to WriteHeader (or Write) has
 		// no effect.
