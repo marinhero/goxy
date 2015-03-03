@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Mon Mar 02 18:46:09 2015 Marin Alcaraz
+** Last update Tue Mar 03 12:58:17 2015 Marin Alcaraz
  */
 
 package main
@@ -17,12 +17,13 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"unicode"
 )
 
-type blackList []string
+type blackList []*regexp.Regexp
 
 var hostBlackList blackList
 
@@ -45,13 +46,13 @@ func (bl blackList) Swap(i, j int) {
 }
 
 func (bl blackList) Less(i, j int) bool {
-	return len(bl[i]) < len(bl[j])
+	return len(bl[i].String()) < len(bl[j].String())
 }
 
 func (bl *blackList) contains(target string) bool {
 	for _, val := range *bl {
-		//TODO Regular expressions
-		if val == target {
+		fmt.Printf("%s.MatchString(%s)", val, target)
+		if val.MatchString(target) == true {
 			return true
 		}
 	}
@@ -68,7 +69,9 @@ func populateBlackList(bl *blackList, blackListFilename string) {
 	for {
 		switch blackTarget, err := reader.ReadBytes('\n'); err {
 		case nil:
-			*bl = append(*bl, string(blackTarget))
+			stringTarget := strings.Trim(string(blackTarget), "\n")
+			*bl = append(*bl,
+				regexp.MustCompile(`\w*://\w*\.*`+stringTarget))
 		case io.EOF:
 			sort.Sort(blackList(hostBlackList))
 			return
@@ -82,9 +85,8 @@ func populateBlackList(bl *blackList, blackListFilename string) {
 func proxyRequestHandler(w http.ResponseWriter, req *http.Request) {
 	target := req.URL.String()
 
-	//Todo: pattern matching!
 	if hostBlackList.contains(target) {
-		fmt.Println("[+]Filtering: ", target)
+		fmt.Println("[+] Filtering: ", target)
 		http.NotFound(w, req)
 	} else {
 		client := http.DefaultClient
@@ -129,7 +131,7 @@ func main() {
 
 	populateBlackList(&hostBlackList, *listFileName)
 	fmt.Printf("[+] Blackisted: %d hosts\n", len(hostBlackList))
-
+	fmt.Println(hostBlackList)
 	http.HandleFunc("/", proxyRequestHandler)
 	fmt.Println("[+] Local service binded on :8080/")
 	err := http.ListenAndServe(":8080", nil)
