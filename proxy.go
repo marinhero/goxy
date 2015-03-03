@@ -3,7 +3,7 @@
 ** Author: Marin Alcaraz
 ** Mail   <marin.alcaraz@gmail.com>
 ** Started on  Fri Feb 20 18:44:36 2015 Marin Alcaraz
-** Last update Tue Mar 03 12:58:17 2015 Marin Alcaraz
+** Last update Tue Mar 03 14:44:15 2015 Marin Alcaraz
  */
 
 package main
@@ -51,7 +51,6 @@ func (bl blackList) Less(i, j int) bool {
 
 func (bl *blackList) contains(target string) bool {
 	for _, val := range *bl {
-		fmt.Printf("%s.MatchString(%s)", val, target)
 		if val.MatchString(target) == true {
 			return true
 		}
@@ -70,8 +69,10 @@ func populateBlackList(bl *blackList, blackListFilename string) {
 		switch blackTarget, err := reader.ReadBytes('\n'); err {
 		case nil:
 			stringTarget := strings.Trim(string(blackTarget), "\n")
-			*bl = append(*bl,
-				regexp.MustCompile(`\w*://\w*\.*`+stringTarget))
+			if stringTarget != "" {
+				*bl = append(*bl,
+					regexp.MustCompile(`\w*://\w*\.*`+stringTarget))
+			}
 		case io.EOF:
 			sort.Sort(blackList(hostBlackList))
 			return
@@ -131,9 +132,8 @@ func main() {
 
 	populateBlackList(&hostBlackList, *listFileName)
 	fmt.Printf("[+] Blackisted: %d hosts\n", len(hostBlackList))
-	fmt.Println(hostBlackList)
 	http.HandleFunc("/", proxyRequestHandler)
-	fmt.Println("[+] Local service binded on :8080/")
+	fmt.Println("[+] Proxy server listening on :8080/")
 	err := http.ListenAndServe(":8080", nil)
 	check(err)
 }
